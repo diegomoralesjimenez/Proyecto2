@@ -1,0 +1,18 @@
+[
+    {
+        "type": "void",
+        "name": "funcion",
+        "Kind": "FUNCTION",
+        "parameters": [
+            {
+                "type": "float",
+                "name": "v"
+            },
+            {
+                "type": "string",
+                "name": "n"
+            }
+        ],
+        "body": []
+    }
+]
