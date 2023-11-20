@@ -208,3 +208,135 @@ def lex(
                         token.char_number,
                         file_name,
                     )
+                    
+            else:
+                if token.type == TokenType.IDENTIFIER:
+                    current_statement["name"] = token.value
+                elif token.type == TokenType.LITERAL:
+                    current_statement["value"] = token.value
+                    current_statement["Kind"] = ExpressionKind.LITERAL
+                elif token.type == TokenType.OPERATOR and token.value == ")":
+                    # Handle the closing parenthesis in a way that makes sense for your language
+                    root_node.append(current_statement)  # Add the current statement before transitioning
+                    current_statement = {}  # Reset the current statement dictionary
+                    state = LexerState.NEXT_STATEMENT
+
+                else:
+                    raise Error(
+                        f"Expected identifier got {str(token)}",
+                        token.line_number,
+                        token.char_number,
+                        file_name,
+                    )
+        elif state == LexerState.VAR_LIST:
+            # check if there is an element in the stack which is a type
+            if len(stack) == 0:
+                if token.type == TokenType.TYPE:
+                    stack.append(token.value)
+                elif token.value == ")":
+                    # check that there is no past comma
+                    if len(current_statement["parameters"]) > 0:
+                        raise Error(
+                            f"Error de )",
+                            token.line_number,
+                            token.char_number,
+                            file_name,
+                        )
+
+                    state = LexerState.EXPECTING_BODY_BLOCK
+                else:
+                    raise Error(
+                        f"'{token}' no es valido como un tipado",
+                        token.line_number,
+                        token.char_number,
+                        file_name,
+                    )
+            elif len(stack) == 1:
+                if token.type == TokenType.IDENTIFIER:
+                    stack.append(token.value)
+                else:
+                    raise Error(
+                        f"Expected identifier got {str(token)}",
+                        token.line_number,
+                        token.char_number,
+                        file_name,
+                    )
+            # there is already a name and the type, expecting a , or a )
+            else:
+                if token.value == ",":
+                    current_statement["parameters"].append(
+                        {"type": stack[0], "name": stack[1]}
+                    )
+                    stack = []
+                elif token.value == ")":
+                    current_statement["parameters"].append(
+                        {"type": stack[0], "name": stack[1]}
+                    )
+                    stack = []
+                    state = LexerState.EXPECTING_BODY_BLOCK
+        elif state == LexerState.EXPECTING_BODY_BLOCK:
+            if token.value == "{":
+                state = LexerState.NEXT_STATEMENT
+                sub_steps, current_statement["body"] = lex(
+                    file_name, tokens[steps + 1 :], LexerState.NEXT_STATEMENT, False
+                )
+                # move steps in case there is no more statements
+                steps += sub_steps
+                # we have to skip n steps for it
+                [next(it) for _ in range(sub_steps)]
+
+                root_node.append(current_statement)
+            else:
+                raise Error(
+                    f"Expected {{ got {str(token)}",
+                    token.line_number,
+                    token.char_number,
+                    file_name,
+                )
+        elif state == LexerState.IN_IF_CONDITION:
+            if token.value == "(":
+                state = LexerState.NEXT_STATEMENT
+                (sub_steps, condition) = lex(
+                    file_name, tokens[steps + 1 :], LexerState.NEXT_STATEMENT, False
+                )
+                # move steps in case there is no more statements
+                steps += sub_steps
+                # we have to skip n steps for it
+                [next(it) for _ in range(sub_steps)]
+
+                current_statement["condition"] = condition
+                state = LexerState.EXPECTING_BODY_BLOCK
+            else:
+                raise Error(
+                    f"Expected ( after if keyword, got {str(token)}",
+                    token.line_number,
+                    token.char_number,
+                    file_name,
+                )
+
+    return (steps + 1, root_node)
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1:
+        # read source code from file
+        with open(sys.argv[1], "r") as f:
+            source_code = f.read()
+    else:
+        # read source code from stdin
+        print(f"usage: python {sys.argv[0]} <path_to_source_code_file>")
+        quit(1)
+
+    # tokenize source code
+    tokens = tokenize(sys.argv[1], source_code)
+    _, tree = lex(sys.argv[1], tokens)
+    # convert the dictionary to a json string
+    import json
+
+    # save it to tree.json
+    with open("tree.json", "w") as f:
+        f.write(json.dumps(tree, indent=4))
+
+    print("El codigo se leyo correctamente")
